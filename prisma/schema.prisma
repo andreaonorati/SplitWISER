@@ -1,0 +1,166 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String               @id @default(uuid())
+  email          String               @unique
+  name           String
+  passwordHash   String
+  avatarUrl      String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  // Relations
+  groupMembers   GroupMember[]
+  expensesPaid   Expense[]            @relation("ExpensePayer")
+  expenseShares  ExpenseParticipant[]
+  settlementsFrom Settlement[]        @relation("SettlementFrom")
+  settlementsTo  Settlement[]         @relation("SettlementTo")
+  receiptUploads ReceiptUpload[]
+  invitesSent    Invite[]             @relation("InviteSender")
+  invitesReceived Invite[]            @relation("InviteRecipient")
+
+  @@map("users")
+}
+
+model GroupTrip {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  currency    String        @default("USD")
+  coverImage  String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  members     GroupMember[]
+  expenses    Expense[]
+  settlements Settlement[]
+  invites     Invite[]
+
+  @@map("group_trips")
+}
+
+model GroupMember {
+  id        String   @id @default(uuid())
+  role      String   @default("member") // "admin" | "member"
+  joinedAt  DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  groupId   String
+  group     GroupTrip @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+  @@map("group_members")
+}
+
+model Invite {
+  id        String   @id @default(uuid())
+  status    String   @default("pending") // "pending" | "accepted" | "declined"
+  token     String   @unique @default(uuid())
+  email     String?
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  groupId   String
+  group     GroupTrip @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  senderId  String
+  sender    User     @relation("InviteSender", fields: [senderId], references: [id])
+
+  recipientId String?
+  recipient   User?  @relation("InviteRecipient", fields: [recipientId], references: [id])
+
+  @@map("invites")
+}
+
+model Expense {
+  id          String               @id @default(uuid())
+  description String
+  amount      Float
+  currency    String               @default("USD")
+  date        DateTime
+  category    String               @default("general")
+  notes       String?
+  splitType   String               @default("equal") // "equal" | "percentage" | "custom"
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  payerId     String
+  payer       User                 @relation("ExpensePayer", fields: [payerId], references: [id])
+
+  groupId     String
+  group       GroupTrip            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  // Relations
+  participants ExpenseParticipant[]
+  receipt      ReceiptUpload?
+
+  @@index([groupId])
+  @@index([payerId])
+  @@map("expenses")
+}
+
+model ExpenseParticipant {
+  id         String  @id @default(uuid())
+  share      Float   // The amount this user owes for this expense
+  percentage Float?  // If split by percentage
+  isPayer    Boolean @default(false)
+
+  userId     String
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  expenseId  String
+  expense    Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, expenseId])
+  @@map("expense_participants")
+}
+
+model Settlement {
+  id        String   @id @default(uuid())
+  amount    Float
+  currency  String   @default("USD")
+  note      String?
+  status    String   @default("pending") // "pending" | "confirmed"
+  createdAt DateTime @default(now())
+
+  fromUserId String
+  fromUser   User    @relation("SettlementFrom", fields: [fromUserId], references: [id])
+
+  toUserId   String
+  toUser     User    @relation("SettlementTo", fields: [toUserId], references: [id])
+
+  groupId    String
+  group      GroupTrip @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@map("settlements")
+}
+
+model ReceiptUpload {
+  id            String   @id @default(uuid())
+  fileName      String
+  fileType      String   // "image" | "pdf" | "csv" | "excel"
+  filePath      String
+  ocrRawText    String?
+  parsedData    Json?    // Structured JSON from AI parsing
+  status        String   @default("processing") // "processing" | "parsed" | "failed"
+  createdAt     DateTime @default(now())
+
+  uploadedById  String
+  uploadedBy    User     @relation(fields: [uploadedById], references: [id])
+
+  expenseId     String?  @unique
+  expense       Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+
+  @@map("receipt_uploads")
+}

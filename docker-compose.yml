@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: splitwiser-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: splitwiser
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    container_name: splitwiser-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      - "4000:4000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/splitwiser?schema=public
+      JWT_SECRET: ${JWT_SECRET:-change-this-in-production}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      NODE_ENV: production
+      PORT: "4000"
+    depends_on:
+      - db
+    volumes:
+      - uploads:/app/uploads
+
+volumes:
+  pgdata:
+  uploads:
