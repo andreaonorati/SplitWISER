@@ -155,6 +155,55 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ── DELETE /api/groups/:id/members/:memberUserId ───────────────────
+router.delete('/:id/members/:memberUserId', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id: groupId, memberUserId } = req.params;
+
+    const requesterMembership = await prisma.groupMember.findFirst({
+      where: { groupId, userId: req.userId },
+    });
+
+    if (!requesterMembership) {
+      res.status(403).json({ error: 'Not a member of this group' });
+      return;
+    }
+
+    if (requesterMembership.role !== 'admin') {
+      res.status(403).json({ error: 'Only admins can remove members' });
+      return;
+    }
+
+    if (memberUserId === req.userId) {
+      res.status(400).json({ error: 'Use group settings to leave a group' });
+      return;
+    }
+
+    const targetMembership = await prisma.groupMember.findFirst({
+      where: { groupId, userId: memberUserId },
+    });
+
+    if (!targetMembership) {
+      res.status(404).json({ error: 'Member not found in this group' });
+      return;
+    }
+
+    if (targetMembership.role === 'admin') {
+      res.status(400).json({ error: 'Cannot remove another admin' });
+      return;
+    }
+
+    await prisma.groupMember.deleteMany({
+      where: { groupId, userId: memberUserId },
+    });
+
+    res.json({ message: 'Member removed successfully' });
+  } catch (err) {
+    console.error('Remove member error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ── POST /api/groups/:id/invite ─────────────────────────────────────
 router.post('/:id/invite', async (req: AuthRequest, res: Response) => {
   try {

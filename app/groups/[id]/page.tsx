@@ -31,6 +31,7 @@ import {
   Search,
   Filter,
   Download,
+  Copy,
   X,
   Clock,
 } from 'lucide-react';
@@ -52,6 +53,7 @@ function GroupDetailContent() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'expenses' | 'balances' | 'members' | 'activity'>('expenses');
   const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteLink, setInviteLink] = useState('');
   const [inviting, setInviting] = useState(false);
 
   const { data: group, isLoading } = useQuery({
@@ -75,7 +77,10 @@ function GroupDetailContent() {
     if (!inviteEmail) return;
     setInviting(true);
     try {
-      await api.inviteToGroup(id, inviteEmail);
+      const invite = await api.inviteToGroup(id, inviteEmail);
+      if (invite?.token && typeof window !== 'undefined') {
+        setInviteLink(`${window.location.origin}/invite?token=${invite.token}`);
+      }
       toast.success(`Invite sent to ${inviteEmail}`);
       setInviteEmail('');
     } catch (err: any) {
@@ -96,6 +101,9 @@ function GroupDetailContent() {
   if (!group) {
     return <div className="text-center py-20 text-gray-500">Group not found</div>;
   }
+
+  const myMembership = (group.members || []).find((m: any) => m.user.id === user?.id);
+  const canManageMembers = myMembership?.role === 'admin';
 
   const tabs = [
     { key: 'expenses' as const, label: 'Expenses', icon: Receipt, count: group.expenses?.length },
@@ -166,6 +174,7 @@ function GroupDetailContent() {
           expenses={group.expenses || []}
           groupId={id}
           currency={group.currency}
+          userId={user?.id}
           queryClient={queryClient}
         />
       )}
@@ -188,8 +197,10 @@ function GroupDetailContent() {
           queryClient={queryClient}
           inviteEmail={inviteEmail}
           setInviteEmail={setInviteEmail}
+          inviteLink={inviteLink}
           onInvite={handleInvite}
           inviting={inviting}
+          canManageMembers={canManageMembers}
         />
       )}
       {activeTab === 'activity' && (
@@ -208,16 +219,19 @@ function ExpensesTab({
   expenses,
   groupId,
   currency,
+  userId,
   queryClient,
 }: {
   expenses: any[];
   groupId: string;
   currency: string;
+  userId?: string;
   queryClient: any;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [viewMode, setViewMode] = useState<'mine' | 'all'>('mine');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [exporting, setExporting] = useState(false);
@@ -232,7 +246,14 @@ function ExpensesTab({
     onError: (err: any) => toast.error(err.message || 'Failed to delete'),
   });
 
-  const filteredExpenses = expenses.filter((expense: any) => {
+  const scopedExpenses =
+    viewMode === 'mine' && userId
+      ? expenses.filter((expense: any) =>
+          expense.participants?.some((p: any) => p.user?.id === userId)
+        )
+      : expenses;
+
+  const filteredExpenses = scopedExpenses.filter((expense: any) => {
     if (searchQuery && !expense.description.toLowerCase().includes(searchQuery.toLowerCase())) {
       return false;
     }
@@ -287,6 +308,28 @@ function ExpensesTab({
     <div className="space-y-4">
       {/* Search & Filter Bar */}
       <div className="card !p-3 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">View</p>
+          <div className="flex items-center rounded-lg border border-gray-200 p-1">
+            <button
+              onClick={() => setViewMode('mine')}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                viewMode === 'mine' ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              My Share
+            </button>
+            <button
+              onClick={() => setViewMode('all')}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                viewMode === 'all' ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              All Expenses
+            </button>
+          </div>
+        </div>
+
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -382,7 +425,7 @@ function ExpensesTab({
       {/* Results count */}
       {hasActiveFilters && (
         <p className="text-sm text-gray-500">
-          Showing {filteredExpenses.length} of {expenses.length} expenses
+          Showing {filteredExpenses.length} of {scopedExpenses.length} expenses
         </p>
       )}
 
@@ -396,6 +439,15 @@ function ExpensesTab({
         <div className="space-y-3">
           {filteredExpenses.map((expense: any) => (
             <div key={expense.id} className="card hover:shadow-md transition-shadow">
+              {viewMode === 'mine' && userId && (() => {
+                const mine = expense.participants?.find((p: any) => p.user?.id === userId);
+                return mine ? (
+                  <div className="mb-3 inline-flex items-center gap-2 text-xs bg-primary-50 text-primary-700 px-2 py-1 rounded-full">
+                    Your share: {formatCurrency(mine.share, currency)}
+                  </div>
+                ) : null;
+              })()}
+
               <div className="flex items-center gap-4">
                 <div className="text-2xl">{getCategoryEmoji(expense.category)}</div>
                 <div className="flex-1 min-w-0">
@@ -796,8 +848,10 @@ function MembersTab({
   queryClient,
   inviteEmail,
   setInviteEmail,
+  inviteLink,
   onInvite,
   inviting,
+  canManageMembers,
 }: {
   members: any[];
   settlements: any[];
@@ -806,8 +860,10 @@ function MembersTab({
   queryClient: any;
   inviteEmail: string;
   setInviteEmail: (v: string) => void;
+  inviteLink: string;
   onInvite: () => void;
   inviting: boolean;
+  canManageMembers: boolean;
 }) {
   const confirmSettlement = useMutation({
     mutationFn: (id: string) => api.confirmSettlement(id),
@@ -821,6 +877,16 @@ function MembersTab({
 
   const pendingSettlements = settlements.filter((s: any) => s.status === 'pending');
   const confirmedSettlements = settlements.filter((s: any) => s.status === 'confirmed');
+
+  const removeMember = useMutation({
+    mutationFn: (memberUserId: string) => api.removeMemberFromGroup(groupId, memberUserId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['group', groupId] });
+      queryClient.invalidateQueries({ queryKey: ['balances', groupId] });
+      toast.success('Member removed');
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to remove member'),
+  });
 
   return (
     <div className="space-y-6">
@@ -842,6 +908,30 @@ function MembersTab({
             {inviting ? 'Sending...' : 'Invite'}
           </button>
         </div>
+
+        {inviteLink && (
+          <div className="mt-3 p-3 rounded-lg bg-gray-50 border border-gray-100">
+            <p className="text-xs text-gray-500 mb-1">Invite link</p>
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={inviteLink}
+                className="input flex-1 !py-1.5 text-sm"
+              />
+              <button
+                onClick={async () => {
+                  await navigator.clipboard.writeText(inviteLink);
+                  toast.success('Invite link copied');
+                }}
+                className="btn-secondary gap-1"
+                title="Copy link"
+              >
+                <Copy className="h-4 w-4" />
+                Copy
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Pending settlements that need confirmation */}
@@ -924,6 +1014,19 @@ function MembersTab({
                 <span className="text-xs font-medium bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full">
                   Admin
                 </span>
+              )}
+              {canManageMembers && m.user.id !== userId && m.role !== 'admin' && (
+                <button
+                  onClick={() => {
+                    if (confirm(`Remove ${m.user.name} from this trip?`)) {
+                      removeMember.mutate(m.user.id);
+                    }
+                  }}
+                  className="text-xs px-2 py-1 rounded-md border border-red-200 text-red-600 hover:bg-red-50"
+                  disabled={removeMember.isPending}
+                >
+                  Remove
+                </button>
               )}
             </div>
           ))}

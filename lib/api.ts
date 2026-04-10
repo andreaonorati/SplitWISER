@@ -109,6 +109,12 @@ class ApiClient {
     });
   }
 
+  async removeMemberFromGroup(groupId: string, memberUserId: string) {
+    return this.request<any>(`/api/groups/${groupId}/members/${memberUserId}`, {
+      method: 'DELETE',
+    });
+  }
+
   async acceptInvite(token: string) {
     return this.request<any>(`/api/groups/invite/${token}/accept`, {
       method: 'POST',
