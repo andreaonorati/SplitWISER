@@ -7,7 +7,10 @@ import OpenAI from 'openai';
  * into structured expense data.
  */
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const hasOpenAIKey = !!process.env.OPENAI_API_KEY?.trim();
+const openai = hasOpenAIKey
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
 
 export interface ParsedExpense {
   merchantName: string;
@@ -58,11 +61,90 @@ Rules:
 - If the currency symbol is missing, default to USD
 - For credit card transactions, the merchant name is the payee`;
 
+function parseAmountAndCurrency(value: string): { amount: number; currency: string } | null {
+  const cleaned = value.replace(/\s+/g, '');
+  const symbolMatch = cleaned.match(/([€$£])/);
+  const currencyMatch = cleaned.match(/(CZK|EUR|USD|Kc|Kč)/i);
+  const numMatch = cleaned.match(/[-+]?\d+[.,]\d{1,2}|[-+]?\d+/);
+
+  if (!numMatch) return null;
+
+  const numeric = parseFloat(numMatch[0].replace(',', '.'));
+  if (Number.isNaN(numeric)) return null;
+
+  let currency = 'USD';
+  if (symbolMatch?.[1] === '€') currency = 'EUR';
+  if (symbolMatch?.[1] === '$') currency = 'USD';
+  if (symbolMatch?.[1] === '£') currency = 'GBP';
+  if (currencyMatch) {
+    const raw = currencyMatch[1].toUpperCase();
+    currency = raw === 'KC' || raw === 'KČ' ? 'CZK' : raw;
+  }
+
+  return { amount: Math.abs(numeric), currency };
+}
+
+function fallbackParseCardTransactions(rawText: string): ParsedExpense[] {
+  const lines = rawText
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const results: ParsedExpense[] = [];
+  const today = new Date().toISOString().slice(0, 10);
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Typical transaction amount pattern from banking app screenshots.
+    const amountMatch = line.match(/[-]\s?([€$£]?\s?\d+[.,]\d{1,2}|\d+[.,]\d{1,2}\s?(CZK|EUR|USD|Kc|Kč)?)/i);
+    if (!amountMatch) continue;
+
+    const parsed = parseAmountAndCurrency(amountMatch[1]);
+    if (!parsed || parsed.amount <= 0) continue;
+
+    let merchant = line.replace(amountMatch[0], '').trim();
+    if (!merchant) {
+      const prev = lines[i - 1] || '';
+      // Avoid using pure time/date lines as merchant name.
+      if (!/^\d{1,2}[:.]\d{2}$/.test(prev) && !/^\d{1,2}\s?[A-Za-z]{3,}$/.test(prev)) {
+        merchant = prev;
+      }
+    }
+
+    if (!merchant || merchant.length < 2) {
+      merchant = 'Card transaction';
+    }
+
+    results.push({
+      merchantName: merchant,
+      date: today,
+      totalAmount: parsed.amount,
+      currency: parsed.currency,
+      items: [],
+      taxAmount: null,
+      tipAmount: null,
+      category: 'general',
+      confidence: 0.45,
+      rawText,
+    });
+  }
+
+  return results;
+}
+
 /**
  * Parse raw OCR text into structured expense data using LLM.
  */
-export async function parseReceiptText(rawText: string): Promise<ParsedExpense> {
-  const response = await openai.chat.completions.create({
+export async function parseReceiptText(rawText: string): Promise<ParsedExpense | ParsedExpense[]> {
+  if (!openai) {
+    const fallback = fallbackParseCardTransactions(rawText);
+    if (fallback.length > 0) return fallback;
+    throw new Error('AI parsing unavailable: OPENAI_API_KEY is not configured');
+  }
+
+  try {
+    const response = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
@@ -76,14 +158,19 @@ export async function parseReceiptText(rawText: string): Promise<ParsedExpense> 
     max_tokens: 2000,
   });
 
-  const content = response.choices[0]?.message?.content;
-  if (!content) {
-    throw new Error('Empty response from AI parsing service');
-  }
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('Empty response from AI parsing service');
+    }
 
-  const parsed: ParsedExpense = JSON.parse(content);
-  parsed.rawText = rawText;
-  return parsed;
+    const parsed: ParsedExpense = JSON.parse(content);
+    parsed.rawText = rawText;
+    return parsed;
+  } catch {
+    const fallback = fallbackParseCardTransactions(rawText);
+    if (fallback.length > 0) return fallback;
+    throw new Error('Failed to parse receipt text');
+  }
 }
 
 /**
@@ -93,6 +180,30 @@ export async function parseTabularData(
   rows: Array<Record<string, string>>,
   headers: string[]
 ): Promise<ParsedExpense[]> {
+  if (!openai) {
+    return rows
+      .map((row) => {
+        const description =
+          row.description || row.merchant || row.payee || row.name || row.note || '';
+        const amountRaw = row.amount || row.total || row.value || row.debit || '';
+        const parsed = parseAmountAndCurrency(String(amountRaw));
+        if (!description || !parsed) return null;
+
+        return {
+          merchantName: description,
+          date: row.date || row.transactionDate || new Date().toISOString().slice(0, 10),
+          totalAmount: parsed.amount,
+          currency: parsed.currency,
+          items: [],
+          taxAmount: null,
+          tipAmount: null,
+          category: 'general',
+          confidence: 0.5,
+        } as ParsedExpense;
+      })
+      .filter((v): v is ParsedExpense => !!v);
+  }
+
   const response = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [
@@ -131,6 +242,8 @@ export async function suggestParticipants(
   expense: ParsedExpense,
   members: Array<{ id: string; name: string }>
 ): Promise<string[]> {
+  if (!openai) return members.map((m) => m.id);
+
   const response = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [

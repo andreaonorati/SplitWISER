@@ -204,7 +204,10 @@ router.post('/text', async (req: AuthRequest, res: Response) => {
       include: { user: { select: { id: true, name: true } } },
     });
     const memberList = members.map((m) => ({ id: m.user.id, name: m.user.name }));
-    const suggestedParticipants = await suggestParticipants(parsedData, memberList);
+    let suggestedParticipants: string[] = memberList.map((m) => m.id);
+    if (parsedData && !Array.isArray(parsedData)) {
+      suggestedParticipants = await suggestParticipants(parsedData, memberList);
+    }
 
     res.json({ parsedData, suggestedParticipants, members: memberList });
   } catch (err) {
