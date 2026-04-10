@@ -10,10 +10,11 @@ services:
     name: splitwiser
     plan: free
     runtime: node
-    nodeVersion: 20.11.0
     buildCommand: npm install && npx prisma generate && npm run build
     startCommand: npx prisma migrate deploy && npm start
     envVars:
+      - key: NODE_VERSION
+        value: 20.11.0
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
