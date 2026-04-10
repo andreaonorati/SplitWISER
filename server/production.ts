@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import path from 'path';
+import fs from 'fs';
 import next from 'next';
 
 import authRoutes from './routes/auth';
@@ -16,7 +17,20 @@ import { apiRateLimiter, authRateLimiter, uploadRateLimiter } from './middleware
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const dev = process.env.NODE_ENV !== 'production';
-const nextApp = next({ dev, dir: path.resolve(__dirname, '..') });
+
+function resolveNextProjectDir() {
+  const compiledRoot = path.resolve(__dirname, '..', '..');
+  const fallbackRoot = path.resolve(__dirname, '..');
+
+  // When transpiled, __dirname is dist/server and app root is two levels up.
+  if (fs.existsSync(path.join(compiledRoot, '.next'))) {
+    return compiledRoot;
+  }
+
+  return fallbackRoot;
+}
+
+const nextApp = next({ dev, dir: resolveNextProjectDir() });
 const handle = nextApp.getRequestHandler();
 
 async function main() {
