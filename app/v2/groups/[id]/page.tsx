@@ -29,24 +29,6 @@ export default function V2GroupPage() {
     enabled: !!groupId,
   });
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-20">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
-
-  if (!group) {
-    return <p className="text-sm text-slate-500 dark:text-slate-400">Gruppo non trovato.</p>;
-  }
-
-  const currency = group.currency || 'EUR';
-  const myBalance =
-    (balances?.userBalances || []).find((entry: any) => entry.user.id === user?.id)?.balance || 0;
-
-  const myBalanceClass = myBalance > 0.01 ? 'v2-credit' : myBalance < -0.01 ? 'v2-debt' : '';
-
   // Easter egg: 3 clicks on the avatar of the Praga group
   const [eggTrigger, setEggTrigger] = useState(0);
   const clickCount = useRef(0);
@@ -81,6 +63,24 @@ export default function V2GroupPage() {
     window.localStorage.setItem(flagKey, '1');
     setFirstExpenseEgg((t) => t + 1);
   }, [group, user?.id]);
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-20">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  if (!group) {
+    return <p className="text-sm text-slate-500 dark:text-slate-400">Gruppo non trovato.</p>;
+  }
+
+  const currency = group.currency || 'EUR';
+  const myBalance =
+    (balances?.userBalances || []).find((entry: any) => entry.user.id === user?.id)?.balance || 0;
+
+  const myBalanceClass = myBalance > 0.01 ? 'v2-credit' : myBalance < -0.01 ? 'v2-debt' : '';
 
   return (
     <div className="v2-enter mx-auto max-w-5xl space-y-6">
