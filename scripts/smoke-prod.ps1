@@ -118,9 +118,21 @@ if ($KuduCredential -or $KuduUsername -or $env:SPLITWISER_KUDU_USERNAME -or $env
     if (-not $dep.complete) {
       throw 'Latest deployment is not complete'
     }
-    if ([int]$dep.status -ne 3) {
-      throw "Latest deployment status is not success (status=$($dep.status))"
+
+    if ([int]$dep.status -eq 3) {
+      return
     }
+
+    if ([int]$dep.status -eq 4 -and $dep.log_url) {
+      $logs = Invoke-RestMethod -Uri $dep.log_url -Headers $headers -Method Get -TimeoutSec 60
+      foreach ($entry in $logs) {
+        if ($entry.message -match 'Deployment successful') {
+          return
+        }
+      }
+    }
+
+    throw "Latest deployment status is not success (status=$($dep.status))"
   }
 }
 

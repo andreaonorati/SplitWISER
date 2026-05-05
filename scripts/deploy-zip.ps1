@@ -81,6 +81,28 @@ function Wait-KuduDeployment {
       if ([int]$dep.status -eq 3) {
         return $dep
       }
+
+      # App Service can occasionally report status=4 even when ZipDeploy finished successfully.
+      if ([int]$dep.status -eq 4 -and $dep.log_url) {
+        try {
+          $logs = Invoke-RestMethod -Uri $dep.log_url -Headers $Headers -Method Get -TimeoutSec 120
+          $hasSuccessLog = $false
+          foreach ($entry in $logs) {
+            if ($entry.message -match 'Deployment successful') {
+              $hasSuccessLog = $true
+              break
+            }
+          }
+
+          if ($hasSuccessLog) {
+            Write-Warning 'Kudu reported status=4 but deployment log confirms success. Continuing.'
+            return $dep
+          }
+        } catch {
+          Write-Warning "Unable to verify status=4 via deployment logs: $($_.Exception.Message)"
+        }
+      }
+
       $statusText = if ($dep.status_text) { $dep.status_text } else { "status=$($dep.status)" }
       throw "Kudu deployment completed but not successful: $statusText"
     }
