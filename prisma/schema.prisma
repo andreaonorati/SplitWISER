@@ -36,7 +36,7 @@ model GroupTrip {
   id          String        @id @default(uuid())
   name        String
   description String?
-  currency    String        @default("USD")
+  currency    String        @default("EUR")
   coverImage  String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
@@ -89,7 +89,7 @@ model Expense {
   id          String               @id @default(uuid())
   description String
   amount      Float
-  currency    String               @default("USD")
+  currency    String               @default("EUR")
   date        DateTime
   category    String               @default("general")
   notes       String?
@@ -175,7 +175,7 @@ model ExpenseParticipant {
 model Settlement {
   id        String   @id @default(uuid())
   amount    Float
-  currency  String   @default("USD")
+  currency  String   @default("EUR")
   note      String?
   status    String   @default("pending") // "pending" | "confirmed"
   createdAt DateTime @default(now())

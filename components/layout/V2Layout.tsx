@@ -3,19 +3,19 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { useQueries, useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
-import { Avatar } from '@/components/ui/Avatar';
 import { PageLoader } from '@/components/ui/Spinner';
+import { fmtCurrency, hueFromName, initials } from '@/lib/v2-format';
 import {
   Activity,
-  BarChart3,
-  ChevronRight,
-  LayoutDashboard,
+  Home,
   LogOut,
   Moon,
+  Receipt,
   Settings,
   Sun,
-  Users,
 } from 'lucide-react';
 
 type ThemeMode = 'light' | 'dark';
@@ -57,6 +57,7 @@ export function V2Layout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { themeMode, setThemeMode } = useThemeMode();
+  const [filter, setFilter] = useState('');
 
   useEffect(() => {
     loadUser();
@@ -68,121 +69,227 @@ export function V2Layout({ children }: { children: React.ReactNode }) {
     }
   }, [isLoading, isAuthenticated, router]);
 
+  const { data: groups } = useQuery({
+    queryKey: ['groups'],
+    queryFn: () => api.getGroups(),
+    enabled: isAuthenticated,
+  });
+
+  const balanceQueries = useQueries({
+    queries: (groups || []).map((g: any) => ({
+      queryKey: ['balances', g.id],
+      queryFn: () => api.getGroupBalances(g.id),
+      enabled: !!g.id && isAuthenticated,
+    })),
+  });
+
+  const friends = useMemo(() => {
+    if (!groups || !user) return [] as Array<{ id: string; name: string; balance: number; currency: string }>;
+
+    const map = new Map<string, { id: string; name: string; balance: number; currency: string }>();
+
+    groups.forEach((g: any, i: number) => {
+      g.members?.forEach((m: any) => {
+        if (m.user.id === user.id) return;
+        if (!map.has(m.user.id)) {
+          map.set(m.user.id, { id: m.user.id, name: m.user.name, balance: 0, currency: g.currency || 'EUR' });
+        }
+      });
+
+      const data = balanceQueries[i]?.data as any;
+      if (!data?.settlementPlan) return;
+      data.settlementPlan.forEach((tx: any) => {
+        if (tx.from?.id === user.id) {
+          const e = map.get(tx.to.id) || { id: tx.to.id, name: tx.to.name, balance: 0, currency: g.currency || 'EUR' };
+          e.balance -= tx.amount;
+          map.set(tx.to.id, e);
+        }
+        if (tx.to?.id === user.id) {
+          const e = map.get(tx.from.id) || { id: tx.from.id, name: tx.from.name, balance: 0, currency: g.currency || 'EUR' };
+          e.balance += tx.amount;
+          map.set(tx.from.id, e);
+        }
+      });
+    });
+
+    return Array.from(map.values());
+  }, [groups, balanceQueries, user]);
+
   const navItems = useMemo(
     () => [
-      { href: '/v2', label: 'Dashboard', icon: LayoutDashboard },
-      { href: '/v2/groups', label: 'Groups', icon: Users },
-      { href: '/v2/balances', label: 'Balances', icon: BarChart3 },
-      { href: '/v2/activity', label: 'Activity', icon: Activity },
-      { href: '/v2/settings', label: 'Settings', icon: Settings },
+      { href: '/v2', label: 'Riepilogo', icon: Home, exact: true },
+      { href: '/v2/activity', label: 'Attività recenti', icon: Activity },
+      { href: '/v2/expenses', label: 'Tutte le spese', icon: Receipt },
     ],
     []
   );
 
-  const currentTitle = useMemo(() => {
-    const current = navItems.find(
-      (item) => pathname === item.href || (item.href !== '/v2' && pathname.startsWith(item.href))
-    );
-    return current?.label || 'Dashboard';
-  }, [navItems, pathname]);
+  const isActive = (href: string, exact = false) =>
+    exact ? pathname === href : pathname === href || pathname.startsWith(href + '/') || pathname === href;
+
+  const filterLower = filter.toLowerCase().trim();
+  const groupList = (groups || []).filter((g: any) =>
+    !filterLower || g.name.toLowerCase().includes(filterLower)
+  );
+  const friendList = friends.filter((f) => !filterLower || f.name.toLowerCase().includes(filterLower));
 
   if (isLoading) return <PageLoader />;
   if (!isAuthenticated) return null;
 
   return (
-    <div className="v2-shell min-h-screen text-slate-900 dark:text-slate-100">
+    <div className="v2-shell">
       <div className="flex min-h-screen">
-        <aside className="m-4 flex w-[292px] shrink-0 flex-col v2-glass p-4">
-          <Link href="/v2" className="mb-6 block text-2xl font-semibold tracking-tight text-sky-600 dark:text-sky-400">
-            <span className="rounded-md bg-sky-500/10 px-2 py-1 text-sm font-bold uppercase tracking-[0.22em] text-sky-700 dark:text-sky-300">V2</span>
-            <span className="ml-2 align-middle">SplitWISER</span>
+        {/* ── Sidebar ─────────────────────────────────────────────── */}
+        <aside className="v2-side sticky top-0 hidden h-screen w-72 shrink-0 flex-col overflow-y-auto px-4 py-5 lg:flex">
+          <Link href="/v2" className="mb-5 flex items-center gap-2 px-1">
+            <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-[#7c5cff] text-sm font-bold text-white">
+              S
+            </span>
+            <span className="text-base font-semibold tracking-tight">SplitWISER</span>
           </Link>
 
-          <div className="mb-4 rounded-xl border border-emerald-200/60 bg-emerald-50/80 px-3 py-2 text-xs font-medium text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-300">
-            Real data mode: no mocked content.
-          </div>
-
-          <nav className="space-y-1.5">
-            {navItems.map((item) => {
-              const isActive =
-                pathname === item.href ||
-                (item.href !== '/v2' && pathname.startsWith(item.href));
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                    isActive
-                      ? 'bg-gradient-to-r from-indigo-500 to-cyan-500 text-white shadow-md shadow-cyan-500/25'
-                      : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/70'
-                  }`}
-                >
-                  <span className={`rounded-lg p-1.5 ${isActive ? 'bg-white/20' : 'bg-slate-200/70 dark:bg-slate-700/60'}`}>
-                    <item.icon className="h-4 w-4" />
-                  </span>
-                  <span className="flex-1">{item.label}</span>
-                  <ChevronRight className={`h-4 w-4 transition ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-60'}`} />
-                </Link>
-              );
-            })}
+          <nav className="space-y-0.5">
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`v2-link ${isActive(item.href, item.exact) ? 'v2-link-active' : ''}`}
+              >
+                <item.icon className="h-4 w-4" />
+                <span className="flex-1">{item.label}</span>
+              </Link>
+            ))}
           </nav>
 
+          <div className="mt-5">
+            <input
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Filtra per nome"
+              className="v2-input"
+            />
+          </div>
+
+          {/* Gruppi */}
+          <div className="mt-5">
+            <div className="mb-2 flex items-center justify-between px-1">
+              <span className="v2-section-label">Gruppi</span>
+              <Link href="/v2/groups/new" className="text-xs font-medium text-[#7c5cff] hover:underline">
+                + aggiungi
+              </Link>
+            </div>
+            <div className="space-y-0.5">
+              {groupList.length === 0 ? (
+                <p className="px-2 py-1 text-xs text-slate-400 dark:text-slate-500">Nessun gruppo.</p>
+              ) : (
+                groupList.slice(0, 12).map((g: any) => (
+                  <Link
+                    key={g.id}
+                    href={`/v2/groups/${g.id}`}
+                    className={`v2-link ${pathname === `/v2/groups/${g.id}` ? 'v2-link-active' : ''}`}
+                  >
+                    <SidebarTag color={`hsl(${hueFromName(g.name)} 65% 55%)`} />
+                    <span className="flex-1 truncate">{g.name}</span>
+                  </Link>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Amici */}
+          <div className="mt-5">
+            <div className="mb-2 flex items-center justify-between px-1">
+              <span className="v2-section-label">Amici</span>
+              <Link href="/v2/friends" className="text-xs font-medium text-[#7c5cff] hover:underline">
+                + aggiungi
+              </Link>
+            </div>
+            <div className="space-y-0.5">
+              {friendList.length === 0 ? (
+                <p className="px-2 py-1 text-xs text-slate-400 dark:text-slate-500">Nessun amico ancora.</p>
+              ) : (
+                friendList.slice(0, 12).map((f) => (
+                  <Link
+                    key={f.id}
+                    href={`/v2/friends/${f.id}`}
+                    className={`v2-link ${pathname === `/v2/friends/${f.id}` ? 'v2-link-active' : ''}`}
+                  >
+                    <SidebarAvatar name={f.name} />
+                    <span className="flex-1 truncate">{f.name}</span>
+                    {Math.abs(f.balance) > 0.01 ? (
+                      <span
+                        className={`v2-tabular text-[11px] font-semibold ${
+                          f.balance >= 0 ? 'v2-credit' : 'v2-debt'
+                        }`}
+                      >
+                        {fmtCurrency(f.balance, f.currency)}
+                      </span>
+                    ) : null}
+                  </Link>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Footer */}
           <div className="mt-auto pt-6">
-            <div className="v2-panel flex items-center gap-2 p-3">
-              <Avatar name={user?.name || ''} size="sm" />
-              <div className="min-w-0">
+            <div className="flex items-center gap-2 rounded-xl border border-black/[0.06] bg-white p-2 dark:border-white/[0.06] dark:bg-[#131318]">
+              <SidebarAvatar name={user?.name || ''} />
+              <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{user?.name}</p>
                 <p className="truncate text-xs text-slate-500 dark:text-slate-400">{user?.email}</p>
               </div>
+              <button
+                onClick={() => setThemeMode(themeMode === 'dark' ? 'light' : 'dark')}
+                className="grid h-7 w-7 place-items-center rounded-md text-slate-500 hover:bg-black/5 dark:text-slate-400 dark:hover:bg-white/5"
+                title={themeMode === 'dark' ? 'Tema chiaro' : 'Tema scuro'}
+              >
+                {themeMode === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+              </button>
             </div>
 
-            <button
-              onClick={logout}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              <LogOut className="h-4 w-4" />
-              Logout
-            </button>
+            <div className="mt-2 flex gap-2">
+              <Link href="/v2/settings" className="v2-btn v2-btn-ghost flex-1">
+                <Settings className="h-3.5 w-3.5" />
+                Impostazioni
+              </Link>
+              <button
+                onClick={logout}
+                className="v2-btn v2-btn-ghost"
+                title="Esci"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         </aside>
 
-        <div className="min-w-0 flex-1 px-2 pb-5 pr-5 pt-4">
-          <header className="v2-glass v2-enter flex h-[76px] items-center justify-between px-5">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">Version Two</p>
-              <h1 className="text-xl font-semibold leading-tight">{currentTitle}</h1>
-            </div>
-
-            <div className="inline-flex items-center rounded-full border border-slate-300 bg-white p-1 dark:border-slate-700 dark:bg-slate-900">
-              <button
-                onClick={() => setThemeMode('light')}
-                className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-medium transition ${
-                  themeMode === 'light'
-                    ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-                    : 'text-slate-600 dark:text-slate-300'
-                }`}
-              >
-                <Sun className="h-4 w-4" />
-                Light
-              </button>
-              <button
-                onClick={() => setThemeMode('dark')}
-                className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-medium transition ${
-                  themeMode === 'dark'
-                    ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-                    : 'text-slate-600 dark:text-slate-300'
-                }`}
-              >
-                <Moon className="h-4 w-4" />
-                Dark
-              </button>
-            </div>
-          </header>
-
-          <main className="v2-enter-delay-1 pt-5">{children}</main>
-        </div>
+        {/* ── Main ────────────────────────────────────────────────── */}
+        <main className="min-w-0 flex-1 px-6 py-6 lg:px-10 lg:py-8">{children}</main>
       </div>
     </div>
+  );
+}
+
+function SidebarTag({ color }: { color: string }) {
+  return (
+    <span
+      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+      style={{ background: color }}
+      aria-hidden
+    />
+  );
+}
+
+function SidebarAvatar({ name }: { name: string }) {
+  const hue = hueFromName(name);
+  return (
+    <span
+      className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white"
+      style={{ background: `hsl(${hue} 55% 50%)` }}
+      aria-hidden
+    >
+      {initials(name)}
+    </span>
   );
 }

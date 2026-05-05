@@ -10,6 +10,7 @@ import settlementRoutes from './routes/settlements';
 import importRoutes from './routes/import';
 import exportRoutes from './routes/export';
 import activityRoutes from './routes/activity';
+import fxRoutes from './routes/fx';
 import { apiRateLimiter, authRateLimiter, uploadRateLimiter } from './middleware/rateLimiter';
 import { runRuntimeMigrations } from './lib/runtimeMigrations';
 
@@ -39,6 +40,7 @@ app.use('/api/settlements', apiRateLimiter, settlementRoutes);
 app.use('/api/import', uploadRateLimiter, importRoutes);
 app.use('/api/export', apiRateLimiter, exportRoutes);
 app.use('/api/activity', apiRateLimiter, activityRoutes);
+app.use('/api/fx', apiRateLimiter, fxRoutes);
 
 // ── Health check ────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {

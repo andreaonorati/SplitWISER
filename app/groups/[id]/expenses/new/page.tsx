@@ -6,12 +6,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { useExpenseFormStore } from '@/stores/expenseFormStore';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { EXPENSE_CATEGORIES } from '@/types';
 import toast from 'react-hot-toast';
 import { parseLocaleNumber } from '@/lib/utils';
+import { CURRENCIES, currencySymbol } from '@/lib/currencies';
 import { useI18n } from '@/lib/i18n';
 
 export default function NewExpensePage() {
@@ -39,6 +40,7 @@ function NewExpenseContent() {
   // Form state
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState('EUR');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [category, setCategory] = useState('general');
   const [notes, setNotes] = useState('');
@@ -48,6 +50,7 @@ function NewExpenseContent() {
   const [customShares, setCustomShares] = useState<Record<string, string>>({});
   const [percentageShares, setPercentageShares] = useState<Record<string, string>>({});
   const draftKey = `splitwiser-expense-draft-${groupId}`;
+  const currencyTouchedRef = useRef(false);
 
   const hasDraftData =
     description || amount || notes || selectedParticipants.length > 0 || Object.keys(customShares).length > 0 || Object.keys(percentageShares).length > 0;
@@ -74,6 +77,9 @@ function NewExpenseContent() {
     }
     if (user?.id && !payerId) {
       setPayerId(user.id);
+    }
+    if (group?.currency && !currencyTouchedRef.current) {
+      setCurrency(group.currency);
     }
   }, [group, user, selectedParticipants.length, payerId]);
 
@@ -149,6 +155,7 @@ function NewExpenseContent() {
     createExpense.mutate({
       description,
       amount: amountNum,
+      currency,
       date,
       category,
       notes: notes || undefined,
@@ -260,18 +267,40 @@ function NewExpenseContent() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_140px] gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{t('newExpense.amount')} *</label>
-              <input
-                type="text"
-                required
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">
+                  {currencySymbol(currency)}
+                </span>
+                <input
+                  type="text"
+                  required
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="input pl-7"
+                  placeholder="0,00"
+                  inputMode="decimal"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Valuta</label>
+              <select
+                value={currency}
+                onChange={(e) => {
+                  currencyTouchedRef.current = true;
+                  setCurrency(e.target.value);
+                }}
                 className="input"
-                placeholder="0.00"
-                inputMode="decimal"
-              />
+              >
+                {CURRENCIES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code} ({c.symbol})
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{t('newExpense.date')} *</label>
@@ -284,6 +313,12 @@ function NewExpenseContent() {
               />
             </div>
           </div>
+
+          <FxConversionHint
+            amount={parseLocaleNumber(amount)}
+            from={currency}
+            to={group?.currency || 'EUR'}
+          />
 
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -376,7 +411,7 @@ function NewExpenseContent() {
 
                   {isSelected && splitType === 'equal' && amount && (
                     <span className="text-sm text-gray-500">
-                      ${((parseLocaleNumber(amount) || 0) / selectedParticipants.length).toFixed(2)}
+                      {currencySymbol(currency)}{((parseLocaleNumber(amount) || 0) / selectedParticipants.length).toFixed(2)}
                     </span>
                   )}
 
@@ -398,7 +433,7 @@ function NewExpenseContent() {
 
                   {isSelected && splitType === 'custom' && (
                     <div className="flex items-center gap-1">
-                      <span className="text-sm text-gray-500">$</span>
+                      <span className="text-sm text-gray-500">{currencySymbol(currency)}</span>
                       <input
                         type="text"
                         value={customShares[m.userId] || ''}

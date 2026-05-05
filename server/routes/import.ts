@@ -373,7 +373,7 @@ router.post('/approve-bulk', async (req: AuthRequest, res: Response) => {
           data: {
             description: expense.merchantName,
             amount: expense.totalAmount,
-            currency: expense.currency || 'USD',
+            currency: expense.currency || 'EUR',
             date: safeDate,
             category: expense.category || 'general',
             notes: buildReceiptNotes(expense.items),

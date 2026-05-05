@@ -22,7 +22,7 @@ router.get('/group/:groupId/balances', async (req: AuthRequest, res: Response) =
     }
 
     const expenses = await prisma.expense.findMany({
-      where: { groupId: req.params.groupId },
+      where: { groupId: req.params.groupId, deletedAt: null },
       include: { participants: true },
     });
 

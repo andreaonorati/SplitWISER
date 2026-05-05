@@ -22,7 +22,7 @@ router.get('/group/:groupId/csv', async (req: AuthRequest, res: Response) => {
     });
 
     const expenses = await prisma.expense.findMany({
-      where: { groupId: req.params.groupId },
+      where: { groupId: req.params.groupId, deletedAt: null },
       include: {
         payer: { select: { name: true, email: true } },
         participants: {
@@ -88,7 +88,7 @@ router.get('/group/:groupId/summary', async (req: AuthRequest, res: Response) =>
     });
 
     const expenses = await prisma.expense.findMany({
-      where: { groupId: req.params.groupId },
+      where: { groupId: req.params.groupId, deletedAt: null },
       include: { participants: true },
     });
 

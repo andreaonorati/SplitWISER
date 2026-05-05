@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { formatDate } from '@/lib/utils';
 import { Spinner } from '@/components/ui/Spinner';
+import { fmtDate, hueFromName, initials } from '@/lib/v2-format';
+import { Plus, Receipt, Users } from 'lucide-react';
 
 export default function V2GroupsPage() {
   const [search, setSearch] = useState('');
@@ -15,13 +16,11 @@ export default function V2GroupsPage() {
     queryFn: () => api.getGroups(),
   });
 
-  const filteredGroups = useMemo(() => {
+  const filtered = useMemo(() => {
     const list = groups || [];
     if (!search.trim()) return list;
-
-    return list.filter((group: any) =>
-      group.name.toLowerCase().includes(search.toLowerCase())
-    );
+    const q = search.toLowerCase();
+    return list.filter((g: any) => g.name.toLowerCase().includes(q));
   }, [groups, search]);
 
   if (isLoading) {
@@ -32,66 +31,74 @@ export default function V2GroupsPage() {
     );
   }
 
-  const totalTrips = filteredGroups.length;
-
   return (
-    <div className="space-y-5">
-      <section className="v2-panel v2-enter overflow-hidden p-6">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight">Groups</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Manage your expense groups</p>
-          </div>
-          <Link href="/groups/new" className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200">
-            Create Group
-          </Link>
+    <div className="v2-enter mx-auto max-w-6xl space-y-6">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="v2-section-label">Gruppi</p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">I tuoi gruppi</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Organizza spese con coinquilini, viaggi, eventi.
+          </p>
         </div>
+        <Link href="/v2/groups/new" className="v2-btn v2-btn-primary">
+          <Plus className="h-4 w-4" />
+          Crea gruppo
+        </Link>
+      </header>
 
-        <div className="mt-4">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search groups..."
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400 dark:border-slate-700 dark:bg-slate-900"
-          />
+      <input
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Cerca un gruppo..."
+        className="v2-input max-w-sm"
+      />
+
+      {!filtered.length ? (
+        <div className="v2-card p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+          {search.trim() ? 'Nessun gruppo trovato.' : 'Non hai ancora creato gruppi.'}
         </div>
-      </section>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((g: any) => (
+            <Link
+              key={g.id}
+              href={`/v2/groups/${g.id}`}
+              className="v2-card v2-card-hover flex flex-col gap-3 p-5"
+            >
+              <div className="flex items-center gap-3">
+                <span
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-[12px] text-sm font-semibold text-white"
+                  style={{ background: `hsl(${hueFromName(g.name)} 60% 50%)` }}
+                >
+                  {initials(g.name)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-base font-semibold">{g.name}</p>
+                  {g.description ? (
+                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">{g.description}</p>
+                  ) : null}
+                </div>
+              </div>
 
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <article className="v2-kpi v2-enter-delay-1">
-          <p className="text-sm text-slate-500 dark:text-slate-400">Total groups</p>
-          <p className="mt-2 text-2xl font-semibold">{totalTrips}</p>
-        </article>
-      </section>
+              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                <span className="inline-flex items-center gap-1">
+                  <Users className="h-3.5 w-3.5" />
+                  {g.members?.length || 0} membri
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <Receipt className="h-3.5 w-3.5" />
+                  {g._count?.expenses || 0} spese
+                </span>
+              </div>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {filteredGroups.map((group: any) => (
-          <Link
-            key={group.id}
-            href={`/v2/groups/${group.id}`}
-            className="v2-panel v2-enter-delay-2 overflow-hidden p-5"
-          >
-            <div className="mb-4 h-1 w-full rounded-full bg-gradient-to-r from-indigo-500 via-cyan-500 to-emerald-500" />
-            <p className="text-lg font-semibold">{group.name}</p>
-            {group.description ? (
-              <p className="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{group.description}</p>
-            ) : null}
-
-            <div className="mt-3 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-              <span>{group.members?.length || 0} members</span>
-              <span>{group._count?.expenses || 0} expenses</span>
-            </div>
-
-            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-              Updated {formatDate(group.updatedAt)}
-            </p>
-          </Link>
-        ))}
-      </section>
-
-      {!filteredGroups.length ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">No groups found.</p>
-      ) : null}
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                Aggiornato {fmtDate(g.updatedAt)}
+              </p>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

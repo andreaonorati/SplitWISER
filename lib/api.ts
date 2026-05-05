@@ -258,6 +258,16 @@ class ApiClient {
   async getActivity(groupId: string, limit = 50, offset = 0): Promise<any> {
     return this.request(`/api/activity/group/${groupId}?limit=${limit}&offset=${offset}`);
   }
+
+  // ── FX (currency conversion, ECB via Frankfurter) ──────────────
+  async getFxRates(base = 'EUR'): Promise<{
+    base: string;
+    date: string;
+    provider: string;
+    rates: Record<string, number>;
+  }> {
+    return this.request(`/api/fx/rates?base=${encodeURIComponent(base)}`);
+  }
 }
 
 export const api = new ApiClient();

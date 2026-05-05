@@ -42,7 +42,7 @@ async function main() {
     data: {
       name: 'Summer Road Trip 2026',
       description: 'Cross-country road trip with friends!',
-      currency: 'USD',
+      currency: 'EUR',
       members: {
         create: [
           { userId: alice.id, role: 'admin' },

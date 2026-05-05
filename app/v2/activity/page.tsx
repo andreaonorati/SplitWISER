@@ -3,8 +3,9 @@
 import { useMemo } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { formatCurrency, formatDate } from '@/lib/utils';
 import { Spinner } from '@/components/ui/Spinner';
+import { fmtCurrency, fmtRelativeDay, hueFromName, initials } from '@/lib/v2-format';
+import { ArrowLeftRight, Receipt } from 'lucide-react';
 
 type ActivityResponse = {
   activities: Array<{
@@ -14,10 +15,25 @@ type ActivityResponse = {
     data: {
       description?: string;
       amount?: number;
+      currency?: string;
+      payer?: { name: string };
       fromUser?: { name: string };
       toUser?: { name: string };
     };
   }>;
+};
+
+type FeedItem = {
+  id: string;
+  date: string;
+  groupId: string;
+  groupName: string;
+  label: string;
+  subLabel: string;
+  amount?: number;
+  currency: string;
+  kind: 'expense' | 'settlement';
+  actor: string;
 };
 
 export default function V2ActivityPage() {
@@ -27,44 +43,57 @@ export default function V2ActivityPage() {
   });
 
   const activityQueries = useQueries({
-    queries: (groups || []).map((group: any) => ({
-      queryKey: ['activity', group.id, 'v2-activity'],
-      queryFn: () => api.getActivity(group.id, 20, 0) as Promise<ActivityResponse>,
-      enabled: !!group.id,
+    queries: (groups || []).map((g: any) => ({
+      queryKey: ['activity', g.id, 'v2'],
+      queryFn: () => api.getActivity(g.id, 50, 0) as Promise<ActivityResponse>,
+      enabled: !!g.id,
     })),
   });
 
-  const feed = useMemo(() => {
-    const items: Array<{
-      id: string;
-      groupName: string;
-      date: string;
-      label: string;
-      amount?: number;
-    }> = [];
+  const feed = useMemo<FeedItem[]>(() => {
+    const items: FeedItem[] = [];
 
-    activityQueries.forEach((query, index) => {
-      const group = groups?.[index];
-      const data = (query.data as ActivityResponse | undefined)?.activities || [];
-
+    activityQueries.forEach((q, i) => {
+      const group = (groups || [])[i];
+      const data = (q.data as ActivityResponse | undefined)?.activities || [];
       data.forEach((entry) => {
-        const label =
-          entry.type === 'expense'
-            ? entry.data.description || 'Expense added'
-            : `${entry.data.fromUser?.name || 'Member'} paid ${entry.data.toUser?.name || 'member'}`;
-
+        const isExpense = entry.type === 'expense';
         items.push({
-          id: `${group?.id || 'group'}-${entry.id}`,
-          groupName: group?.name || 'Group',
+          id: `${group?.id}-${entry.id}`,
           date: entry.date,
-          label,
+          groupId: group?.id,
+          groupName: group?.name || '—',
+          label: isExpense
+            ? entry.data.description || 'Spesa'
+            : `Pareggio: ${entry.data.fromUser?.name || ''} → ${entry.data.toUser?.name || ''}`,
+          subLabel: isExpense
+            ? entry.data.payer?.name
+              ? `Pagato da ${entry.data.payer.name}`
+              : ''
+            : 'Pagamento',
           amount: entry.data.amount,
+          currency: entry.data.currency || group?.currency || 'EUR',
+          kind: entry.type,
+          actor: isExpense
+            ? entry.data.payer?.name || 'Spesa'
+            : entry.data.fromUser?.name || 'Pareggio',
         });
       });
     });
 
     return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [activityQueries, groups]);
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, FeedItem[]>();
+    feed.forEach((item) => {
+      const key = fmtRelativeDay(item.date);
+      const list = map.get(key) || [];
+      list.push(item);
+      map.set(key, list);
+    });
+    return Array.from(map.entries());
+  }, [feed]);
 
   if (isLoading) {
     return (
@@ -75,36 +104,60 @@ export default function V2ActivityPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <section>
-        <h1 className="text-3xl font-semibold tracking-tight">Activity</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">Recent activity across your groups</p>
-      </section>
+    <div className="v2-enter mx-auto max-w-4xl space-y-6">
+      <header>
+        <p className="v2-section-label">Attività recenti</p>
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Tutto ciò che è successo.</h1>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Spese e pareggi attraverso tutti i tuoi gruppi.
+        </p>
+      </header>
 
       {!feed.length ? (
-        <section className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm dark:border-slate-800 dark:bg-[#171923] dark:text-slate-400">
-          No activity yet.
-        </section>
+        <div className="v2-card p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+          Nessuna attività ancora.
+        </div>
       ) : (
-        <section className="space-y-3">
-          {feed.map((item) => (
-            <article key={item.id} className="v2-panel relative overflow-hidden px-4 py-3">
-              <div className="absolute left-4 top-0 h-full w-px bg-gradient-to-b from-indigo-400/40 via-cyan-400/20 to-transparent" />
-              <div className="flex items-start justify-between gap-3 pl-4">
-                <div className="relative">
-                  <span className="absolute -left-[22px] top-1 h-2.5 w-2.5 rounded-full bg-indigo-500" />
-                  <p className="text-sm font-medium">{item.label}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {item.groupName} · {formatDate(item.date)}
-                  </p>
-                </div>
-                {typeof item.amount === 'number' ? (
-                  <p className="text-sm font-semibold text-emerald-500">{formatCurrency(item.amount)}</p>
-                ) : null}
+        <div className="space-y-6">
+          {grouped.map(([day, items]) => (
+            <section key={day}>
+              <h2 className="v2-section-label mb-2 px-1">{day}</h2>
+              <div className="v2-card divide-y divide-black/[0.06] dark:divide-white/[0.06]">
+                {items.map((item) => (
+                  <article key={item.id} className="flex items-center gap-3 px-4 py-3">
+                    <span
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-white"
+                      style={{ background: `hsl(${hueFromName(item.actor)} 55% 50%)` }}
+                      aria-hidden
+                    >
+                      {item.kind === 'expense' ? (
+                        <Receipt className="h-4 w-4" />
+                      ) : (
+                        <ArrowLeftRight className="h-4 w-4" />
+                      )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{item.label}</p>
+                      <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                        {item.groupName}
+                        {item.subLabel ? ` · ${item.subLabel}` : ''}
+                      </p>
+                    </div>
+                    {typeof item.amount === 'number' ? (
+                      <p
+                        className={`v2-tabular text-sm font-semibold ${
+                          item.kind === 'settlement' ? 'v2-credit' : ''
+                        }`}
+                      >
+                        {fmtCurrency(item.amount, item.currency)}
+                      </p>
+                    ) : null}
+                  </article>
+                ))}
               </div>
-            </article>
+            </section>
           ))}
-        </section>
+        </div>
       )}
     </div>
   );

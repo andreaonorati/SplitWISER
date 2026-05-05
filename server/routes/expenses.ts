@@ -16,7 +16,7 @@ const participantSchema = z.object({
 const createExpenseSchema = z.object({
   description: z.string().min(1).max(300),
   amount: z.number().positive(),
-  currency: z.string().length(3).default('USD'),
+  currency: z.string().length(3).default('EUR'),
   date: z.string().transform((s) => new Date(s)),
   category: z.string().default('general'),
   notes: z.string().max(1000).optional(),

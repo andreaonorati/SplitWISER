@@ -37,7 +37,7 @@ Always respond with valid JSON matching this exact schema:
   "merchantName": "string",
   "date": "YYYY-MM-DD",
   "totalAmount": number,
-  "currency": "USD",
+  "currency": "EUR",
   "items": [
     {
       "description": "string",
@@ -58,7 +58,7 @@ Rules:
 - If items can't be extracted, return empty items array
 - Always include totalAmount even if estimated
 - Set confidence based on how clear the input was
-- If the currency symbol is missing, default to USD
+- If the currency symbol is missing, default to EUR
 - For credit card transactions, the merchant name is the payee`;
 
 function parseAmountAndCurrency(value: string): { amount: number; currency: string } | null {
@@ -72,7 +72,7 @@ function parseAmountAndCurrency(value: string): { amount: number; currency: stri
   const numeric = parseFloat(numMatch[0].replace(',', '.'));
   if (Number.isNaN(numeric)) return null;
 
-  let currency = 'USD';
+  let currency = 'EUR';
   if (symbolMatch?.[1] === '€') currency = 'EUR';
   if (symbolMatch?.[1] === '$') currency = 'USD';
   if (symbolMatch?.[1] === '£') currency = 'GBP';

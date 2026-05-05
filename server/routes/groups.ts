@@ -11,7 +11,7 @@ router.use(authMiddleware);
 const createGroupSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(500).optional(),
-  currency: z.string().length(3).default('USD'),
+  currency: z.string().length(3).default('EUR'),
 });
 
 // ── POST /api/groups ────────────────────────────────────────────────
