@@ -76,10 +76,14 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
           include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
         },
         expenses: {
+          where: { deletedAt: null },
           include: {
             payer: { select: { id: true, name: true, email: true, avatarUrl: true } },
             participants: {
               include: { user: { select: { id: true, name: true, email: true } } },
+            },
+            confirmations: {
+              select: { userId: true, status: true, confirmedAt: true },
             },
           },
           orderBy: { date: 'desc' },

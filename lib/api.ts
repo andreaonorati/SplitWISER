@@ -151,6 +151,18 @@ class ApiClient {
     return this.request<void>(`/api/expenses/${id}`, { method: 'DELETE' });
   }
 
+  async restoreExpense(id: string) {
+    return this.request<any>(`/api/expenses/${id}/restore`, { method: 'POST' });
+  }
+
+  async confirmExpense(id: string) {
+    return this.request<any>(`/api/expenses/${id}/confirm`, { method: 'POST' });
+  }
+
+  async getExpenseHistory(id: string) {
+    return this.request<any[]>(`/api/expenses/${id}/history`);
+  }
+
   // ── Settlements ─────────────────────────────────────────────────
   async getGroupBalances(groupId: string) {
     return this.request<any>(`/api/settlements/group/${groupId}/balances`);
@@ -171,8 +183,16 @@ class ApiClient {
 
   // ── Import / AI ─────────────────────────────────────────────────
   async uploadReceipt(file: File, groupId: string) {
+    return this.uploadReceipts([file], groupId);
+  }
+
+  async uploadReceipts(files: File[], groupId: string) {
     const formData = new FormData();
-    formData.append('file', file);
+    if (files.length === 1) {
+      formData.append('file', files[0]);
+    } else {
+      files.forEach((file) => formData.append('files', file));
+    }
     formData.append('groupId', groupId);
 
     return this.request<any>('/api/import/upload', {
@@ -185,6 +205,18 @@ class ApiClient {
     return this.request<any>('/api/import/text', {
       method: 'POST',
       body: JSON.stringify({ text, groupId }),
+    });
+  }
+
+  async approveImportedExpenses(data: {
+    groupId: string;
+    payerId: string;
+    participantIds: string[];
+    expenses: any[];
+  }) {
+    return this.request<{ createdCount: number; expenses: any[] }>('/api/import/approve-bulk', {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 

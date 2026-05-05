@@ -14,6 +14,7 @@ import importRoutes from './routes/import';
 import exportRoutes from './routes/export';
 import activityRoutes from './routes/activity';
 import { apiRateLimiter, authRateLimiter, uploadRateLimiter } from './middleware/rateLimiter';
+import { runRuntimeMigrations } from './lib/runtimeMigrations';
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const dev = process.env.NODE_ENV !== 'production';
@@ -35,6 +36,14 @@ const handle = nextApp.getRequestHandler();
 
 async function main() {
   await nextApp.prepare();
+
+  try {
+    await runRuntimeMigrations();
+    console.log('Runtime DB migrations applied');
+  } catch (err) {
+    console.error('Runtime DB migrations failed:', err);
+    process.exit(1);
+  }
 
   const app = express();
 

@@ -36,11 +36,30 @@ export interface Expense {
   category: string;
   notes?: string | null;
   splitType: 'equal' | 'percentage' | 'custom';
+  status: 'pending_confirmation' | 'confirmed' | 'deleted';
+  confirmedAt?: string | null;
+  createdById?: string | null;
   payerId: string;
   groupId: string;
   payer: Pick<User, 'id' | 'name' | 'email' | 'avatarUrl'>;
   participants: ExpenseParticipant[];
+  confirmations?: ExpenseConfirmation[];
+  history?: ExpenseHistory[];
   receipt?: ReceiptUpload | null;
+  createdAt: string;
+}
+
+export interface ExpenseConfirmation {
+  userId: string;
+  status: 'pending' | 'confirmed';
+  confirmedAt?: string | null;
+}
+
+export interface ExpenseHistory {
+  id: string;
+  action: 'created' | 'updated' | 'deleted' | 'restored' | string;
+  snapshot: unknown;
+  actor?: Pick<User, 'id' | 'name' | 'email'> | null;
   createdAt: string;
 }
 

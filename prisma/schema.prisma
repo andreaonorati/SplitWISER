@@ -19,7 +19,10 @@ model User {
   // Relations
   groupMembers   GroupMember[]
   expensesPaid   Expense[]            @relation("ExpensePayer")
+  expensesCreated Expense[]           @relation("ExpenseCreator")
   expenseShares  ExpenseParticipant[]
+  expenseConfirmations ExpenseConfirmation[]
+  expenseHistoryActions ExpenseHistory[] @relation("ExpenseHistoryActor")
   settlementsFrom Settlement[]        @relation("SettlementFrom")
   settlementsTo  Settlement[]         @relation("SettlementTo")
   receiptUploads ReceiptUpload[]
@@ -91,22 +94,66 @@ model Expense {
   category    String               @default("general")
   notes       String?
   splitType   String               @default("equal") // "equal" | "percentage" | "custom"
+  status      String               @default("pending_confirmation") // "pending_confirmation" | "confirmed" | "deleted"
+  confirmedAt DateTime?
+  deletedAt   DateTime?
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
 
   payerId     String
   payer       User                 @relation("ExpensePayer", fields: [payerId], references: [id])
 
+  createdById String?
+  createdBy   User?                @relation("ExpenseCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
   groupId     String
   group       GroupTrip            @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   // Relations
   participants ExpenseParticipant[]
+  confirmations ExpenseConfirmation[]
+  history      ExpenseHistory[]
   receipt      ReceiptUpload?
 
   @@index([groupId])
   @@index([payerId])
+  @@index([createdById])
+  @@index([status])
+  @@index([deletedAt])
   @@map("expenses")
+}
+
+model ExpenseConfirmation {
+  id          String   @id @default(uuid())
+  status      String   @default("pending") // "pending" | "confirmed"
+  confirmedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  expenseId   String
+  expense     Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([expenseId, userId])
+  @@index([userId])
+  @@map("expense_confirmations")
+}
+
+model ExpenseHistory {
+  id         String   @id @default(uuid())
+  action     String   // "created" | "updated" | "deleted" | "restored"
+  snapshot   Json
+  createdAt  DateTime @default(now())
+
+  expenseId  String
+  expense    Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  actorId    String?
+  actor      User?    @relation("ExpenseHistoryActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([expenseId, createdAt])
+  @@map("expense_history")
 }
 
 model ExpenseParticipant {

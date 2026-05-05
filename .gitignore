@@ -30,9 +30,32 @@ yarn-error.log*
 # OS
 .DS_Store
 Thumbs.db
+*.lnk
+desktop.ini
 
 # Prisma
 prisma/migrations/
 
 # Uploads
 uploads/
+
+# Local operational logs
+logs_keep/
+deploy_staging/logs_recovery/
+deploy_staging/webapp-logs-*/
+logs_after/
+logs_*/
+webapp-logs-*/
+webapp-logs-*.zip
+deploy*.zip
+tmp_zip_check/
+versions/snapshots/
+scripts/keep/run-watchdog.cmd
+versions/v2/design-source/*.zip
+versions/v2/design-source/extracted/
+
+# Sensitive deployment credentials
+*.PublishSettings
+*.publishsettings
+*.pubxml
+*publishProfile*.xml

@@ -11,6 +11,8 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { EXPENSE_CATEGORIES } from '@/types';
 import toast from 'react-hot-toast';
+import { parseLocaleNumber } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n';
 
 export default function NewExpensePage() {
   return (
@@ -26,6 +28,7 @@ function NewExpenseContent() {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const { prefillData, clearPrefillData } = useExpenseFormStore();
+  const { t } = useI18n();
 
   // Fetch group to get members
   const { data: group } = useQuery({
@@ -44,6 +47,10 @@ function NewExpenseContent() {
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   const [customShares, setCustomShares] = useState<Record<string, string>>({});
   const [percentageShares, setPercentageShares] = useState<Record<string, string>>({});
+  const draftKey = `splitwiser-expense-draft-${groupId}`;
+
+  const hasDraftData =
+    description || amount || notes || selectedParticipants.length > 0 || Object.keys(customShares).length > 0 || Object.keys(percentageShares).length > 0;
 
   // Pre-fill from AI data
   useEffect(() => {
@@ -73,26 +80,29 @@ function NewExpenseContent() {
   const createExpense = useMutation({
     mutationFn: (data: any) => api.createExpense(data),
     onSuccess: () => {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(draftKey);
+      }
       queryClient.invalidateQueries({ queryKey: ['group', groupId] });
       queryClient.invalidateQueries({ queryKey: ['balances', groupId] });
-      toast.success('Expense added!');
+      toast.success(t('newExpense.expenseAdded'));
       router.push(`/groups/${groupId}`);
     },
     onError: (err: any) => {
-      toast.error(err.message || 'Failed to add expense');
+      toast.error(err.message || t('newExpense.failedAdd'));
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const amountNum = parseFloat(amount);
+    const amountNum = parseLocaleNumber(amount);
 
     if (!amountNum || amountNum <= 0) {
-      toast.error('Please enter a valid amount');
+      toast.error(t('newExpense.invalidAmount'));
       return;
     }
     if (selectedParticipants.length === 0) {
-      toast.error('Select at least one participant');
+      toast.error(t('newExpense.selectParticipant'));
       return;
     }
 
@@ -108,31 +118,31 @@ function NewExpenseContent() {
       }));
     } else if (splitType === 'percentage') {
       const totalPct = selectedParticipants.reduce(
-        (s, uid) => s + (parseFloat(percentageShares[uid]) || 0),
+        (s, uid) => s + (parseLocaleNumber(percentageShares[uid]) || 0),
         0
       );
       if (Math.abs(totalPct - 100) > 0.01) {
-        toast.error(`Percentages must sum to 100% (currently ${totalPct.toFixed(1)}%)`);
+        toast.error(`${t('newExpense.percentageInvalid')} (${t('newExpense.currently')} ${totalPct.toFixed(1)}%)`);
         return;
       }
       participants = selectedParticipants.map((uid) => ({
         userId: uid,
-        share: Math.round(amountNum * (parseFloat(percentageShares[uid]) || 0) / 100 * 100) / 100,
-        percentage: parseFloat(percentageShares[uid]) || 0,
+        share: Math.round(amountNum * (parseLocaleNumber(percentageShares[uid]) || 0) / 100 * 100) / 100,
+        percentage: parseLocaleNumber(percentageShares[uid]) || 0,
       }));
     } else {
       // Custom
       const totalCustom = selectedParticipants.reduce(
-        (s, uid) => s + (parseFloat(customShares[uid]) || 0),
+        (s, uid) => s + (parseLocaleNumber(customShares[uid]) || 0),
         0
       );
       if (Math.abs(totalCustom - amountNum) > 0.01) {
-        toast.error(`Custom amounts must sum to ${amountNum} (currently ${totalCustom.toFixed(2)})`);
+        toast.error(`${t('newExpense.customInvalidPrefix')} ${amountNum} (${t('newExpense.currently')} ${totalCustom.toFixed(2)})`);
         return;
       }
       participants = selectedParticipants.map((uid) => ({
         userId: uid,
-        share: parseFloat(customShares[uid]) || 0,
+        share: parseLocaleNumber(customShares[uid]) || 0,
       }));
     }
 
@@ -151,6 +161,72 @@ function NewExpenseContent() {
 
   const members = group?.members || [];
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const raw = localStorage.getItem(draftKey);
+    if (!raw) return;
+
+    try {
+      const draft = JSON.parse(raw);
+      if (draft.description) setDescription(draft.description);
+      if (draft.amount) setAmount(draft.amount);
+      if (draft.date) setDate(draft.date);
+      if (draft.category) setCategory(draft.category);
+      if (draft.notes) setNotes(draft.notes);
+      if (draft.splitType) setSplitType(draft.splitType);
+      if (draft.payerId) setPayerId(draft.payerId);
+      if (Array.isArray(draft.selectedParticipants)) setSelectedParticipants(draft.selectedParticipants);
+      if (draft.customShares) setCustomShares(draft.customShares);
+      if (draft.percentageShares) setPercentageShares(draft.percentageShares);
+    } catch {
+      localStorage.removeItem(draftKey);
+    }
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!hasDraftData) return;
+
+    const payload = {
+      description,
+      amount,
+      date,
+      category,
+      notes,
+      splitType,
+      payerId,
+      selectedParticipants,
+      customShares,
+      percentageShares,
+      updatedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(draftKey, JSON.stringify(payload));
+  }, [
+    description,
+    amount,
+    date,
+    category,
+    notes,
+    splitType,
+    payerId,
+    selectedParticipants,
+    customShares,
+    percentageShares,
+    hasDraftData,
+    draftKey,
+  ]);
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!hasDraftData || createExpense.isPending) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [hasDraftData, createExpense.isPending]);
+
   const toggleParticipant = (userId: string) => {
     setSelectedParticipants((prev) =>
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
@@ -164,42 +240,41 @@ function NewExpenseContent() {
         className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-6"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to {group?.name || 'Trip'}
+        {t('newExpense.backTo')} {group?.name || 'Trip'}
       </Link>
 
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Add Expense</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">{t('newExpense.title')}</h1>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Basic info */}
         <div className="card space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('newExpense.description')} *</label>
             <input
               type="text"
               required
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="input"
-              placeholder="e.g., Dinner at the Italian place"
+              placeholder={t('newExpense.descriptionPlaceholder')}
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Amount *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('newExpense.amount')} *</label>
               <input
-                type="number"
+                type="text"
                 required
-                step="0.01"
-                min="0.01"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 className="input"
                 placeholder="0.00"
+                inputMode="decimal"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('newExpense.date')} *</label>
               <input
                 type="date"
                 required
@@ -212,7 +287,7 @@ function NewExpenseContent() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('newExpense.category')}</label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
@@ -226,7 +301,7 @@ function NewExpenseContent() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Paid by</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('newExpense.paidBy')}</label>
               <select
                 value={payerId}
                 onChange={(e) => setPayerId(e.target.value)}
@@ -242,20 +317,20 @@ function NewExpenseContent() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('newExpense.notes')}</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="input"
               rows={2}
-              placeholder="Optional notes..."
+              placeholder={t('newExpense.optionalNotes')}
             />
           </div>
         </div>
 
         {/* Split Type */}
         <div className="card">
-          <label className="block text-sm font-medium text-gray-700 mb-3">Split Method</label>
+          <label className="block text-sm font-medium text-gray-700 mb-3">{t('newExpense.splitMethod')}</label>
           <div className="grid grid-cols-3 gap-2">
             {(['equal', 'percentage', 'custom'] as const).map((type) => (
               <button
@@ -268,7 +343,7 @@ function NewExpenseContent() {
                     : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                {type === 'equal' ? '÷ Equal' : type === 'percentage' ? '% Percentage' : '# Custom'}
+                {type === 'equal' ? `÷ ${t('newExpense.equal')}` : type === 'percentage' ? `% ${t('newExpense.percentage')}` : `# ${t('newExpense.custom')}`}
               </button>
             ))}
           </div>
@@ -277,7 +352,7 @@ function NewExpenseContent() {
         {/* Participants */}
         <div className="card">
           <label className="block text-sm font-medium text-gray-700 mb-3">
-            Participants ({selectedParticipants.length} selected)
+            {t('newExpense.participants')} ({selectedParticipants.length} {t('newExpense.selected')})
           </label>
           <div className="space-y-2">
             {members.map((m: any) => {
@@ -301,23 +376,21 @@ function NewExpenseContent() {
 
                   {isSelected && splitType === 'equal' && amount && (
                     <span className="text-sm text-gray-500">
-                      ${(parseFloat(amount) / selectedParticipants.length).toFixed(2)}
+                      ${((parseLocaleNumber(amount) || 0) / selectedParticipants.length).toFixed(2)}
                     </span>
                   )}
 
                   {isSelected && splitType === 'percentage' && (
                     <div className="flex items-center gap-1">
                       <input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        max="100"
+                        type="text"
                         value={percentageShares[m.userId] || ''}
                         onChange={(e) =>
                           setPercentageShares((p) => ({ ...p, [m.userId]: e.target.value }))
                         }
                         className="w-20 input text-right"
                         placeholder="0"
+                        inputMode="decimal"
                       />
                       <span className="text-sm text-gray-500">%</span>
                     </div>
@@ -327,15 +400,14 @@ function NewExpenseContent() {
                     <div className="flex items-center gap-1">
                       <span className="text-sm text-gray-500">$</span>
                       <input
-                        type="number"
-                        step="0.01"
-                        min="0"
+                        type="text"
                         value={customShares[m.userId] || ''}
                         onChange={(e) =>
                           setCustomShares((p) => ({ ...p, [m.userId]: e.target.value }))
                         }
                         className="w-24 input text-right"
                         placeholder="0.00"
+                        inputMode="decimal"
                       />
                     </div>
                   )}
@@ -351,7 +423,7 @@ function NewExpenseContent() {
           className="btn-primary w-full"
           disabled={createExpense.isPending}
         >
-          {createExpense.isPending ? 'Adding...' : 'Add Expense'}
+          {createExpense.isPending ? t('newExpense.adding') : t('newExpense.addExpense')}
         </button>
       </form>
     </div>

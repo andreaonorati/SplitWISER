@@ -11,6 +11,7 @@ import importRoutes from './routes/import';
 import exportRoutes from './routes/export';
 import activityRoutes from './routes/activity';
 import { apiRateLimiter, authRateLimiter, uploadRateLimiter } from './middleware/rateLimiter';
+import { runRuntimeMigrations } from './lib/runtimeMigrations';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '4000', 10);
@@ -51,8 +52,20 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 });
 
 // ── Start ───────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`🚀 SplitWISER API running on http://localhost:${PORT}`);
-});
+async function startServer() {
+  try {
+    await runRuntimeMigrations();
+    console.log('Runtime DB migrations applied');
+  } catch (err) {
+    console.error('Runtime DB migrations failed:', err);
+    process.exit(1);
+  }
+
+  app.listen(PORT, () => {
+    console.log(`🚀 SplitWISER API running on http://localhost:${PORT}`);
+  });
+}
+
+void startServer();
 
 export default app;

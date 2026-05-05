@@ -43,3 +43,9 @@ export function getCategoryEmoji(category: string): string {
   };
   return map[category] || '📝';
 }
+
+export function parseLocaleNumber(input: string): number {
+  if (!input) return NaN;
+  const normalized = input.trim().replace(',', '.');
+  return Number.parseFloat(normalized);
+}

@@ -15,7 +15,7 @@
     "db:seed": "ts-node prisma/seed.ts",
     "db:studio": "prisma studio",
     "lint": "next lint",
-    "postinstall": "prisma generate"
+    "postinstall": "node -e \"const fs=require('fs');const cp=require('child_process');if(fs.existsSync('prisma/schema.prisma')){cp.execSync('npx prisma generate',{stdio:'inherit'});}else{console.log('Skipping prisma generate: prisma/schema.prisma not found in build context.');}\""
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",

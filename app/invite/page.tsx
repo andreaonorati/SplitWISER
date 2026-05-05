@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { Spinner } from '@/components/ui/Spinner';
 import { Receipt, CheckCircle, XCircle } from 'lucide-react';
 import Link from 'next/link';
+import { useI18n } from '@/lib/i18n';
 
 export default function AcceptInvitePage() {
   return (
@@ -25,6 +26,7 @@ function InviteContent() {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [groupId, setGroupId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const { t } = useI18n();
 
   useEffect(() => {
     loadUser();
@@ -41,7 +43,7 @@ function InviteContent() {
 
     if (!token) {
       setStatus('error');
-      setErrorMsg('No invite token provided');
+      setErrorMsg(t('invite.noToken'));
       return;
     }
 
@@ -53,9 +55,9 @@ function InviteContent() {
       })
       .catch((err) => {
         setStatus('error');
-        setErrorMsg(err.message || 'Failed to accept invite');
+        setErrorMsg(err.message || t('invite.failedAccept'));
       });
-  }, [authLoading, isAuthenticated, token, router]);
+  }, [authLoading, isAuthenticated, token, router, t]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
@@ -71,20 +73,20 @@ function InviteContent() {
           {status === 'loading' && (
             <div className="py-8">
               <Spinner size="lg" className="mx-auto" />
-              <p className="mt-4 text-gray-600">Accepting invite...</p>
+              <p className="mt-4 text-gray-600">{t('invite.accepting')}</p>
             </div>
           )}
 
           {status === 'success' && (
             <div className="py-8">
               <CheckCircle className="h-16 w-16 text-green-500 mx-auto" />
-              <h2 className="mt-4 text-xl font-bold text-gray-900">You&apos;re in!</h2>
-              <p className="mt-2 text-gray-600">You&apos;ve been added to the trip group.</p>
+              <h2 className="mt-4 text-xl font-bold text-gray-900">{t('invite.successTitle')}</h2>
+              <p className="mt-2 text-gray-600">{t('invite.successBody')}</p>
               <Link
                 href={groupId ? `/groups/${groupId}` : '/dashboard'}
                 className="btn-primary mt-6 inline-flex"
               >
-                Go to Trip
+                {t('invite.goToTrip')}
               </Link>
             </div>
           )}
@@ -92,10 +94,10 @@ function InviteContent() {
           {status === 'error' && (
             <div className="py-8">
               <XCircle className="h-16 w-16 text-red-500 mx-auto" />
-              <h2 className="mt-4 text-xl font-bold text-gray-900">Invite Failed</h2>
+              <h2 className="mt-4 text-xl font-bold text-gray-900">{t('invite.failedTitle')}</h2>
               <p className="mt-2 text-gray-600">{errorMsg}</p>
               <Link href="/dashboard" className="btn-secondary mt-6 inline-flex">
-                Go to Dashboard
+                {t('invite.goToDashboard')}
               </Link>
             </div>
           )}
