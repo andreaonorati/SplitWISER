@@ -18,68 +18,74 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password.length < 6) {
-      toast.error('Password must be at least 6 characters');
+      toast.error('La password deve avere almeno 6 caratteri');
       return;
     }
     setLoading(true);
     try {
       await register(email, name, password);
-      router.push('/dashboard');
-      toast.success('Account created!');
+      router.push('/v2');
+      toast.success('Account creato');
     } catch (err: any) {
-      toast.error(err.message || 'Registration failed');
+      toast.error(err.message || 'Registrazione fallita');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
+    <div className="v2-shell flex min-h-screen items-center justify-center px-4">
+      <div className="v2-enter w-full max-w-md">
+        <div className="mb-6 text-center">
           <Link href="/" className="inline-flex items-center gap-2">
-            <Receipt className="h-8 w-8 text-primary-600" />
-            <span className="text-2xl font-bold">
-              Split<span className="text-primary-600">WISER</span>
+            <Receipt className="h-7 w-7 text-[#7c5cff]" />
+            <span className="text-xl font-semibold tracking-tight">
+              Split<span className="text-[#7c5cff]">WISER</span>
             </span>
           </Link>
-          <h2 className="mt-6 text-2xl font-bold text-gray-900">Create your account</h2>
+          <p className="v2-section-label mt-6">Registrati</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Crea il tuo account</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Bastano pochi secondi
+          </p>
         </div>
 
-        <div className="card">
-          <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="v2-card p-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-                Full Name
+              <label htmlFor="name" className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+                Nome
               </label>
               <input
                 id="name"
                 type="text"
                 required
+                autoComplete="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="input"
-                placeholder="John Doe"
+                className="v2-input"
+                placeholder="Mario Rossi"
               />
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="email" className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
                 Email
               </label>
               <input
                 id="email"
                 type="email"
                 required
+                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="input"
-                placeholder="you@example.com"
+                className="v2-input"
+                placeholder="tu@esempio.com"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="password" className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
                 Password
               </label>
               <input
@@ -87,22 +93,27 @@ export default function RegisterPage() {
                 type="password"
                 required
                 minLength={6}
+                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="input"
-                placeholder="At least 6 characters"
+                className="v2-input"
+                placeholder="Almeno 6 caratteri"
               />
             </div>
 
-            <button type="submit" className="btn-primary w-full" disabled={loading}>
-              {loading ? 'Creating account...' : 'Create Account'}
+            <button
+              type="submit"
+              className="v2-btn v2-btn-primary w-full justify-center"
+              disabled={loading}
+            >
+              {loading ? 'Creazione…' : 'Crea account'}
             </button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-gray-500">
-            Already have an account?{' '}
-            <Link href="/login" className="font-semibold text-primary-600 hover:text-primary-500">
-              Sign in
+          <p className="mt-5 text-center text-sm text-slate-500 dark:text-slate-400">
+            Hai già un account?{' '}
+            <Link href="/login" className="font-semibold text-[#7c5cff] hover:underline">
+              Accedi
             </Link>
           </p>
         </div>
